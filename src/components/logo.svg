@@ -1,0 +1,66 @@
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- 渐变背景 -->
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#E0E7FF;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#EEF2FF;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <circle cx="16" cy="16" r="16" fill="url(#grad)"/>
+  
+  <!-- 数据块组 -->
+  <g transform="translate(8, 8)">
+    <!-- 输入数据块 -->
+    <rect 
+      x="0" 
+      y="2" 
+      width="6" 
+      height="6" 
+      rx="1"
+      fill="#4F46E5"
+      fill-opacity="0.1"
+      stroke="#4F46E5"
+      stroke-width="1.5"
+    />
+    
+    <!-- 中间处理块 -->
+    <rect 
+      x="7" 
+      y="8" 
+      width="6" 
+      height="6" 
+      rx="1"
+      fill="#4F46E5"
+      fill-opacity="0.2"
+      stroke="#4F46E5"
+      stroke-width="1.5"
+    />
+    
+    <!-- 输出数据块 -->
+    <rect 
+      x="14" 
+      y="2" 
+      width="6" 
+      height="6" 
+      rx="1"
+      fill="#4F46E5"
+      fill-opacity="0.3"
+      stroke="#4F46E5"
+      stroke-width="1.5"
+    />
+    
+    <!-- 连接线 -->
+    <path
+      d="M6 5 L7 5 Q8 5 8 6 L8 11 M13 11 L14 11 Q15 11 15 10 L15 5"
+      stroke="#4F46E5"
+      stroke-width="1.5"
+      stroke-linecap="round"
+      fill="none"
+    />
+    
+    <!-- 动态数据点 -->
+    <circle cx="3" cy="5" r="1" fill="#4F46E5"/>
+    <circle cx="10" cy="11" r="1" fill="#4F46E5"/>
+    <circle cx="17" cy="5" r="1" fill="#4F46E5"/>
+  </g>
+</svg> 
