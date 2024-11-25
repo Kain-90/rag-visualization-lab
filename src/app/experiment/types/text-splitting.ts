@@ -1,24 +1,23 @@
 export type SplitStrategy = 'recursive-character' | 'character'
 
 export const SplitStrategyList = [
-  {'character': '字符分块'},
-  {'recursive-character': '递归字符分块 (常见)'},
+  {'character': '固定字符(character)'},
+  {'recursive-character': '递归字符(recursive-character)'},
 ]
 
 export interface TextBlock {
   text: string;
-  start: number;
-  end: number;
-  metadata?: Record<string, any>;
 } 
 
 export abstract class BaseTextSplitter {
-  protected chunkSize: number;
-  protected overlap: number;
+  chunkSize: number;
+  overlap: number;
+  separator: string;
 
-  constructor(chunkSize: number = 1000, overlap: number = 200) {
+  constructor(chunkSize: number = 1000, overlap: number = 200, separator: string = '') {
     this.chunkSize = chunkSize;
     this.overlap = overlap;
+    this.separator = separator;
   }
 
   abstract splitText(text: string): Promise<TextBlock[]>;

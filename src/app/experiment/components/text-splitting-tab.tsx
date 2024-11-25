@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useDebouncedCallback } from "use-debounce";
 import {
   Card,
   CardContent,
@@ -17,17 +18,14 @@ import {
   SplitStrategy,
   TextBlock,
   SplitStrategyList,
-  BaseTextSplitter,
 } from "../types/text-splitting";
-import { RecursiveCharacterTextSplitter } from "../utils/recursive-character-text-splitter";
-import { CharacterSplitter } from "../utils/character-splitter";
-
-
-const SAMPLE_TEXT = `人工智能（Artificial Intelligence，简称AI）是计算机科学的一个分支，它企图了解智能的实质，并生产出一种新的能以人类智能相似的方式做出反应的智能机器。
-
-人工智能的定义可以分为两个部分：人工和智能。人工：指由人制造的，区别于自然生成的。智能：指机器具有感知、思考、学习、推理和解决问题的能力。
-
-人工智能技术包括机器学习、深度学习、自然语言处理、计算机视觉等多个领域。这些技术已经在我们的日常生活中得到广泛应用，如语音助手、人脸识别、自动驾驶等。`;
+import {
+  CharacterTextSplitter,
+  RecursiveCharacterTextSplitter,
+} from "@langchain/textsplitters";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { TEXT_SPLITTING_SAMPLE } from "../constants/sample-texts";
 
 async function splitText(
   text: string,
@@ -35,28 +33,29 @@ async function splitText(
   options: { chunkSize: number; overlap: number }
 ): Promise<TextBlock[]> {
   try {
-    if (options.chunkSize <= 0) {
-      console.warn("Invalid chunk size, using default value of 1000");
-      options.chunkSize = 1000;
-    }
-    if (options.overlap < 0 || options.overlap >= options.chunkSize) {
-      console.warn("Invalid overlap size, using default value of 200");
-      options.overlap = Math.min(200, options.chunkSize / 2);
-    }
-
-    let splitter: BaseTextSplitter;
+    let splitter;
     switch (strategy) {
-      case "recursive-character":
-        splitter = new RecursiveCharacterTextSplitter();
-        break;
       case "character":
-        splitter = new CharacterSplitter(options.chunkSize, options.overlap);
+        splitter = new CharacterTextSplitter({
+          separator: "\n\n",
+          chunkSize: options.chunkSize,
+          chunkOverlap: options.overlap,
+        });
+        console.log(options.chunkSize, options.overlap);
+        break;
+      case "recursive-character":
+        splitter = new RecursiveCharacterTextSplitter({
+          chunkSize: options.chunkSize,
+          chunkOverlap: options.overlap,
+          separators: ["\n\n"],
+        });
         break;
       default:
         throw new Error("Invalid split strategy");
     }
 
-    return await splitter.splitText(text);
+    const documents = await splitter.splitText(text);
+    return documents.map((doc) => ({ text: doc }));
   } catch (error) {
     console.error("Error splitting text:", error);
     return [];
@@ -74,34 +73,46 @@ const COLORS = [
 
 export function TextSplittingTab() {
   const [strategy, setStrategy] = useState<SplitStrategy>("character");
-  const [text, setText] = useState(SAMPLE_TEXT);
+  const [text, setText] = useState(TEXT_SPLITTING_SAMPLE);
   const [blocks, setBlocks] = useState<TextBlock[]>([]);
-  const [chunkSize, setChunkSize] = useState(1000);
-  const [overlap, setOverlap] = useState(200);
+  const [chunkSize, setChunkSize] = useState(200);
+  const [overlap, setOverlap] = useState(0);
 
-  useEffect(() => {
-    const updateBlocks = async () => {
+  const debouncedSplitText = useDebouncedCallback(async () => {
+    try {
       const newBlocks = await splitText(text, strategy, { chunkSize, overlap });
       setBlocks(newBlocks);
-    };
-    updateBlocks();
+    } catch (error) {
+      console.error("Error splitting text:", error);
+      setBlocks([]);
+    }
+  }, 500);
+
+  useEffect(() => {
+    debouncedSplitText();
   }, [text, strategy, chunkSize, overlap]);
 
   const handleChunkSizeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = Number(e.target.value);
-    setChunkSize(Math.max(1, value));
+    setChunkSize(value);
   };
 
   const handleOverlapChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = Number(e.target.value);
-    setOverlap(Math.min(Math.max(0, value), chunkSize - 1));
+    setOverlap(value);
   };
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>文本分块</CardTitle>
-        <CardDescription>了解如何将长文本切分成语义连贯的小块</CardDescription>
+        <CardDescription>
+          了解如何将长文本切分成语义连贯的小块
+          <br />
+          - character 策略: 统一切分大小，轻松适应任何模型。（适用于简单场景）
+          <br />- recursive-character 策略:
+          递归切分，能够保持自然语言的连贯性，并适应不同级别的文本粒度。（适用于实际应用场景）
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex items-center space-x-4">
@@ -110,7 +121,7 @@ export function TextSplittingTab() {
             value={strategy}
             onValueChange={(value) => setStrategy(value as SplitStrategy)}
           >
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger className="w-[254px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -127,35 +138,36 @@ export function TextSplittingTab() {
         </div>
 
         <div className="flex items-center space-x-4 mt-4">
-          <div>
+          <div className="flex items-center">
             <label className="text-sm font-medium">块大小:</label>
-            <input
+            <Input
               type="number"
               value={chunkSize}
               onChange={handleChunkSizeChange}
               min="1"
-              className="w-24 ml-2 p-1 rounded-md border border-input bg-background"
+              max={10000}
+              className="w-24 ml-2"
             />
           </div>
-          <div>
+          <div className="flex items-center">
             <label className="text-sm font-medium">重叠大小:</label>
-            <input
+            <Input
               type="number"
               value={overlap}
               onChange={handleOverlapChange}
               min="0"
               max={chunkSize - 1}
-              className="w-24 ml-2 p-1 rounded-md border border-input bg-background"
+              className="w-24 ml-2"
             />
           </div>
         </div>
 
         <div className="space-y-2">
           <label className="text-sm font-medium">输入文本:</label>
-          <textarea
+          <Textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
-            className="w-full min-h-[200px] p-2 rounded-md border border-input bg-background"
+            className="min-h-[200px]"
             placeholder="在此输入要分块的文本..."
           />
         </div>
