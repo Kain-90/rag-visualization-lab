@@ -18,11 +18,23 @@ export type EmbeddingProgressMessage = {
   status: "loading" | "ready" | "error" | "complete";
   progress?: LangchainProgress;
   message?: string;
-  output?: number[];
+  output?: number[][][];
 };
 
 export type EmbeddingTaskMessage = {
   task: "feature-extraction";
   model: EmbeddingModel;
-  text: string;
+  text: string | string[];
+};
+
+export type UILoadingState = {
+  status: "idle" | "loading-model" | "generating" | "error";
+  progress?: LangchainProgress;
+  error?: string;
+};
+
+export type UIFileProgress = {
+  filename: string;
+  progress: number;
+  status: 'initiate' | 'loading' | 'done';
 };

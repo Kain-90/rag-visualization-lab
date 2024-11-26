@@ -1,4 +1,10 @@
 import { useState, useEffect, useRef } from "react";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+  TooltipProvider,
+} from "@/components/ui/tooltip";
 import { useDebouncedCallback } from "use-debounce";
 import {
   Card,
@@ -20,42 +26,33 @@ import {
   EmbeddingModel,
   EmbeddingProgressMessage,
   EmbeddingTaskMessage,
-  LangchainProgress,
+  UILoadingState,
+  UIFileProgress,
 } from "../types/embedding";
 import { Progress } from "@/components/ui/progress";
 import { Check } from "lucide-react";
-
-type LoadingState = {
-  status: "idle" | "loading-model" | "generating" | "error";
-  progress?: LangchainProgress;
-  error?: string;
-};
-
-type FileProgress = {
-  filename: string;
-  progress: number;
-  status: 'initiate' | 'loading' | 'done';
-};
 
 export function EmbeddingTab() {
   const [model, setModel] = useState<EmbeddingModel>(
     "Snowflake/snowflake-arctic-embed-xs"
   );
-  const [text, setText] = useState("这是一段示例文本，用于生成文本嵌入向量。");
-  const [embedding, setEmbedding] = useState<number[]>([]);
-  const [loadingState, setLoadingState] = useState<LoadingState>({
+  const [text, setText] = useState("This is a sample text for generating text embedding vectors.");
+  const [embedding, setEmbedding] = useState<number[][][]>([]);
+  const [loadingState, setLoadingState] = useState<UILoadingState>({
     status: "idle",
   });
-  const [fileProgresses, setFileProgresses] = useState<Map<string, FileProgress>>(new Map());
+  const [fileProgresses, setFileProgresses] = useState<
+    Map<string, UIFileProgress>
+  >(new Map());
 
   const calculateOverallProgress = () => {
     if (fileProgresses.size === 0) return 0;
 
     let total = 0;
-    fileProgresses.forEach(file => {
-      total += file.status === 'done' ? 100 : file.progress;
+    fileProgresses.forEach((file) => {
+      total += file.status === "done" ? 100 : file.progress;
     });
-    
+
     return Math.round(total / fileProgresses.size);
   };
 
@@ -71,10 +68,15 @@ export function EmbeddingTab() {
 
     try {
       setLoadingState({ status: "generating" });
+      const textBlocks = text
+        .split("\n")
+        .map((block) => block.trim())
+        .filter((block) => block.length > 0);
+
       const message: EmbeddingTaskMessage = {
         task: "feature-extraction",
         model,
-        text,
+        text: textBlocks,
       };
       workerRef.current.postMessage(message);
     } catch (error) {
@@ -121,30 +123,26 @@ export function EmbeddingTab() {
             });
 
             const filename = progress.file;
-            setFileProgresses(prev => {
+            setFileProgresses((prev) => {
               const newFileProgresses = new Map(prev);
-              if (progress?.status === 'done') {
+              if (progress?.status === "done") {
                 newFileProgresses.set(filename, {
                   filename,
                   progress: 100,
-                  status: 'done'
+                  status: "done",
                 });
-              } else if (progress?.status === 'ready') {
+              } else if (progress?.status === "ready") {
               } else {
-                console.log('last set file progress', filename, progress);
                 newFileProgresses.set(filename, {
                   filename,
                   progress: progress?.progress || 0,
-                  status: progress?.status || 'loading'
+                  status: progress?.status || "loading",
                 });
               }
               return newFileProgresses;
             });
           } else if (status === "ready") {
             setLoadingState({ status: "idle" });
-            if (text.trim()) {
-              debouncedGetEmbedding();
-            }
           } else if (status === "complete" && output) {
             setEmbedding(output);
             setLoadingState({ status: "idle" });
@@ -178,21 +176,21 @@ export function EmbeddingTab() {
       workerRef.current?.terminate();
       workerRef.current = null;
     };
-  }, [text, debouncedGetEmbedding]);
+  }, []);
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>向量嵌入</CardTitle>
+        <CardTitle>Vector Embedding</CardTitle>
         <CardDescription>
-          观察文本是如何被转换为向量的
+          Observe how text is converted into vectors
           <br />
-          通过将文本转换为高维向量空间中的点，我们可以计算文本之间的语义相似度
+          By converting text into points in high-dimensional vector space, we can calculate semantic similarity between texts
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex items-center space-x-4">
-          <span className="text-sm font-medium">嵌入模型:</span>
+          <span className="text-sm font-medium">Embedding Model:</span>
           <Select
             value={model}
             onValueChange={(value) => setModel(value as EmbeddingModel)}
@@ -210,15 +208,17 @@ export function EmbeddingTab() {
           </Select>
         </div>
 
-        {["loading-model", "generating", "idle"].includes(loadingState.status) && (
+        {["loading-model", "generating", "idle"].includes(
+          loadingState.status
+        ) && (
           <div className="flex flex-col space-y-3 p-4 bg-muted/50 rounded-lg border border-border">
             <div className="flex items-center justify-between text-sm">
               <span>
                 {loadingState.progress?.status === "initiate"
-                  ? "正在加载模型..."
+                  ? "Loading model..."
                   : loadingState.progress?.status === "done"
-                  ? "模型加载完成"
-                  : "模型加载中..."}
+                  ? "Model loaded"
+                  : "Loading model..."}
               </span>
               <span className="font-medium">{loadingProgress}%</span>
             </div>
@@ -230,7 +230,7 @@ export function EmbeddingTab() {
                   <div key={file.filename} className="flex justify-between">
                     <span>{file.filename}</span>
                     <div className="flex items-center gap-2">
-                      {file.status === 'done' ? (
+                      {file.status === "done" ? (
                         <Check className="h-4 w-4 text-green-500" />
                       ) : (
                         <span>{`${file.progress}%`}</span>
@@ -244,49 +244,73 @@ export function EmbeddingTab() {
         )}
 
         <div className="space-y-2">
-          <label className="text-sm font-medium">输入文本:</label>
+          <label className="text-sm font-medium">
+            Input Text (each line will generate an independent embedding vector):
+          </label>
           <Textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
             className="min-h-[100px]"
-            placeholder="在此输入要生成嵌入的文本..."
+            placeholder="Enter text here to generate embeddings, each line will generate an independent embedding vector..."
           />
         </div>
 
-        <div className="min-h-[400px] rounded-lg border-2 border-dashed border-muted-foreground/25 p-4">
-          {loadingState.status === "generating" ? (
-            <div className="flex items-center justify-center h-full">
-              正在生成嵌入向量...
-            </div>
-          ) : embedding.length > 0 ? (
-            <div className="space-y-4">
-              <div className="text-sm font-medium">
-                向量维度: {embedding.length}
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Embedding Vectors:</label>
+          <div className="min-h-[400px] rounded-lg border-2 border-dashed border-muted-foreground/25 p-4">
+            {loadingState.status === "generating" ? (
+              <div className="flex items-center justify-center h-full">
+                Generating embedding vectors...
               </div>
-              <div className="grid grid-cols-8 gap-2">
-                {embedding.slice(0, 32).map((value, index) => (
-                  <div
-                    key={index}
-                    className="text-xs p-1 bg-muted rounded flex items-center justify-center"
-                    title={`维度 ${index}: ${value}`}
-                  >
-                    {value}
+            ) : embedding.length > 0 ? (
+              <div className="space-y-8 flex flex-col items-center">
+                {embedding.map((blockEmbedding, blockIndex) => (
+                  <div key={blockIndex}>
+                    <TooltipProvider>
+                      <Tooltip delayDuration={100}>
+                        <TooltipTrigger>
+                          <div className="relative p-2 bg-muted rounded-md hover:bg-muted/80 transition-colors group">
+                            <div className="text-xs text-center space-y-1">
+                              <div className="font-mono">
+                                <p>[{blockEmbedding[0][0].toFixed(4)}...,</p>
+                                <p>
+                                  <span className="text-muted-foreground/60">
+                                    ...
+                                  </span>
+                                </p>
+                                <p>
+                                  {blockEmbedding[0][
+                                    blockEmbedding[0].length - 1
+                                  ].toFixed(4)}
+                                  ...]
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <div className="text-xs">
+                            [
+                            {blockEmbedding
+                              .slice(0, 32)
+                              .map((v) => v[0].toFixed(4))
+                              .join(", ")}
+                            ...]
+                          </div>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   </div>
                 ))}
               </div>
-              {embedding.length > 32 && (
-                <div className="text-sm text-muted-foreground text-center">
-                  显示前32个维度 (共 {embedding.length} 维)
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="flex items-center justify-center h-full text-muted-foreground">
-              {loadingState.status === "error"
-                ? `错误: ${loadingState.error}`
-                : "请输入文本生成嵌入向量"}
-            </div>
-          )}
+            ) : (
+              <div className="flex items-center justify-center h-full text-muted-foreground">
+                {loadingState.status === "error"
+                  ? `Error: ${loadingState.error}`
+                  : "Please enter text to generate embedding vectors"}
+              </div>
+            )}
+          </div>
         </div>
       </CardContent>
     </Card>

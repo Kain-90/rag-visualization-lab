@@ -89,7 +89,7 @@ export function TextSplittingTab() {
 
   useEffect(() => {
     debouncedSplitText();
-  }, [text, strategy, chunkSize, overlap]);
+  }, [text, strategy, chunkSize, overlap, debouncedSplitText]);
 
   const handleChunkSizeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = Number(e.target.value);

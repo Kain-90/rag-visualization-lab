@@ -9,7 +9,7 @@ import { GenerationTab } from "./generation-tab"
 
 export function ExperimentContent() {
   return (
-    <Tabs defaultValue="text-splitting" className="space-y-4">
+    <Tabs defaultValue="embedding" className="space-y-4">
       <TabsList className="grid w-full grid-cols-4">
         <TabsTrigger value="text-splitting" className="space-x-2">
           <SplitSquareHorizontal className="h-4 w-4" />
