@@ -16,7 +16,7 @@ export function Header() {
           </a>
         </div>
         <div className="flex flex-1 items-center justify-end space-x-4">
-          <a href="https://github.com/yourusername/rag-visualization" target="_blank" rel="noopener noreferrer">
+          <a href="https://github.com/Kain-90/rag-visualization-lab" target="_blank" rel="noopener noreferrer">
             <Button variant="ghost" size="icon">
               <Github className="h-10 w-10" />
             </Button>

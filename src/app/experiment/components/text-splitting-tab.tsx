@@ -41,7 +41,6 @@ async function splitText(
           chunkSize: options.chunkSize,
           chunkOverlap: options.overlap,
         });
-        console.log(options.chunkSize, options.overlap);
         break;
       case "recursive-character":
         splitter = new RecursiveCharacterTextSplitter({
@@ -164,6 +163,9 @@ export function TextSplittingTab() {
 
         <div className="space-y-2">
           <label className="text-sm font-medium">输入文本:</label>
+          <div className="text-xs text-muted-foreground mb-2">
+            示例文本来源于 AWS 文档，修改了部分格式
+          </div>
           <Textarea
             value={text}
             onChange={(e) => setText(e.target.value)}

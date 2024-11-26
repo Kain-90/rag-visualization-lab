@@ -1,7 +1,6 @@
 import { Button } from "@/components/ui/button";
 import {
   ArrowRight,
-  Github,
   SplitSquareHorizontal,
   Boxes,
   Search,
