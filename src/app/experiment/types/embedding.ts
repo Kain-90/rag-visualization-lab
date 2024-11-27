@@ -15,20 +15,22 @@ export type LangchainProgress = {
 }
 
 export type EmbeddingProgressMessage = {
-  status: "loading" | "ready" | "error" | "complete";
+  status: "loading" | "embedding" | "ready" | "error" | "complete";
   progress?: LangchainProgress;
   message?: string;
   output?: number[][][];
+  type?: "question" | "blocks";
 };
 
 export type EmbeddingTaskMessage = {
   task: "feature-extraction";
   model: EmbeddingModel;
+  type: "question" | "blocks";
   text: string | string[];
 };
 
 export type UILoadingState = {
-  status: "idle" | "loading-model" | "generating" | "error";
+  status: "idle" | "embedding" | "loading-model" | "generating" | "error";
   progress?: LangchainProgress;
   error?: string;
 };

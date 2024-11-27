@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import { useDebouncedCallback } from "use-debounce";
 import {
   Card,
@@ -25,7 +25,7 @@ import {
 } from "@langchain/textsplitters";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { TEXT_SPLITTING_SAMPLE } from "../constants/sample-texts";
+import { useTextSplittingStore } from "@/app/stores/text-splitting-store";
 
 async function splitText(
   text: string,
@@ -71,11 +71,18 @@ const COLORS = [
 ];
 
 export function TextSplittingTab() {
-  const [strategy, setStrategy] = useState<SplitStrategy>("character");
-  const [text, setText] = useState(TEXT_SPLITTING_SAMPLE);
-  const [blocks, setBlocks] = useState<TextBlock[]>([]);
-  const [chunkSize, setChunkSize] = useState(200);
-  const [overlap, setOverlap] = useState(0);
+  const {
+    text,
+    blocks,
+    strategy,
+    chunkSize,
+    overlap,
+    setText,
+    setBlocks,
+    setStrategy,
+    setChunkSize,
+    setOverlap
+  } = useTextSplittingStore()
 
   const debouncedSplitText = useDebouncedCallback(async () => {
     try {

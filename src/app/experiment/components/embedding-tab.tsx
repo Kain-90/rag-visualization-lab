@@ -1,10 +1,4 @@
 import { useState, useEffect, useRef } from "react";
-import {
-  Tooltip,
-  TooltipTrigger,
-  TooltipContent,
-  TooltipProvider,
-} from "@/components/ui/tooltip";
 import { useDebouncedCallback } from "use-debounce";
 import {
   Card,
@@ -31,19 +25,23 @@ import {
 } from "../types/embedding";
 import { Progress } from "@/components/ui/progress";
 import { Check } from "lucide-react";
+import { useTextSplittingStore } from "@/app/stores/text-splitting-store";
 
 export function EmbeddingTab() {
+  const { blocks } = useTextSplittingStore();
   const [model, setModel] = useState<EmbeddingModel>(
     "Snowflake/snowflake-arctic-embed-xs"
   );
-  const [text, setText] = useState("This is a sample text for generating text embedding vectors.");
-  const [embedding, setEmbedding] = useState<number[][][]>([]);
+  const [question, setQuestion] = useState("What would you like to ask?");
+  const [blocksEmbedding, setBlocksEmbedding] = useState<number[][][]>([]);
+  const [questionEmbedding, setQuestionEmbedding] = useState<number[][]>([]);
   const [loadingState, setLoadingState] = useState<UILoadingState>({
     status: "idle",
   });
   const [fileProgresses, setFileProgresses] = useState<
     Map<string, UIFileProgress>
   >(new Map());
+  const [embeddingProgress, setEmbeddingProgress] = useState<number>(0);
 
   const calculateOverallProgress = () => {
     if (fileProgresses.size === 0) return 0;
@@ -60,7 +58,7 @@ export function EmbeddingTab() {
 
   const workerRef = useRef<Worker | null>(null);
 
-  const debouncedGetEmbedding = useDebouncedCallback(() => {
+  const debouncedGetEmbedding = useDebouncedCallback((question: string = "") => {
     if (!workerRef.current) {
       console.error("Worker not initialized");
       return;
@@ -68,20 +66,25 @@ export function EmbeddingTab() {
 
     try {
       setLoadingState({ status: "generating" });
-      const textBlocks = text
-        .split("\n")
-        .map((block) => block.trim())
-        .filter((block) => block.length > 0);
+      let textBlocks: string[] = [];
+      if (question.length > 0) {
+        textBlocks = [question]
+      } else {
+        textBlocks = blocks
+          .map((block) => block.text)
+          .filter((block) => block.length > 0);
+      }
 
       const message: EmbeddingTaskMessage = {
         task: "feature-extraction",
         model,
         text: textBlocks,
+        type: question.length > 0 ? "question" : "blocks",
       };
       workerRef.current.postMessage(message);
     } catch (error) {
       console.error("Error sending message to worker:", error);
-      setEmbedding([]);
+      setBlocksEmbedding([]);
       setLoadingState({
         status: "error",
         error: String(error),
@@ -90,10 +93,10 @@ export function EmbeddingTab() {
   }, 500);
 
   useEffect(() => {
-    if (text.trim()) {
-      debouncedGetEmbedding();
+    if (question.trim()) {
+      debouncedGetEmbedding(question);
     }
-  }, [text, model, debouncedGetEmbedding]);
+  }, [question, model, debouncedGetEmbedding]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -108,7 +111,7 @@ export function EmbeddingTab() {
         workerRef.current.onmessage = (
           event: MessageEvent<EmbeddingProgressMessage>
         ) => {
-          const { status, progress, message, output } = event.data;
+          const { status, progress, message, output, type } = event.data;
           console.log("Worker message received:", {
             status,
             progress,
@@ -141,14 +144,22 @@ export function EmbeddingTab() {
               }
               return newFileProgresses;
             });
+          } else if (status === "embedding") {
+            setLoadingState({ status: "embedding" });
+            setEmbeddingProgress(progress?.progress || 0);
           } else if (status === "ready") {
             setLoadingState({ status: "idle" });
+            debouncedGetEmbedding();
           } else if (status === "complete" && output) {
-            setEmbedding(output);
+            if (type === "question") {
+              setQuestionEmbedding(output[0]);
+            } else {
+              setBlocksEmbedding(output);
+            }
             setLoadingState({ status: "idle" });
           } else if (status === "error") {
             console.error("Error generating embedding:", message);
-            setEmbedding([]);
+            setBlocksEmbedding([]);
             setLoadingState({
               status: "error",
               error: message,
@@ -176,16 +187,15 @@ export function EmbeddingTab() {
       workerRef.current?.terminate();
       workerRef.current = null;
     };
-  }, []);
+  }, [debouncedGetEmbedding]);
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Vector Embedding</CardTitle>
+        <CardTitle>Vector Embedding & Similarity</CardTitle>
         <CardDescription>
-          Observe how text is converted into vectors
-          <br />
-          By converting text into points in high-dimensional vector space, we can calculate semantic similarity between texts
+          View text blocks and their vector embeddings side by side. Ask
+          questions to find similar content through semantic search.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -245,71 +255,91 @@ export function EmbeddingTab() {
 
         <div className="space-y-2">
           <label className="text-sm font-medium">
-            Input Text (each line will generate an independent embedding vector):
+            Ask a question to find similar content:
           </label>
           <Textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            className="min-h-[100px]"
-            placeholder="Enter text here to generate embeddings, each line will generate an independent embedding vector..."
+            value={question}
+            onChange={(e) => setQuestion(e.target.value)}
+            className="min-h-[80px]"
+            placeholder="Enter your question here..."
           />
+          {questionEmbedding.length > 0 && (
+            <div className="mt-4 p-3 rounded-md bg-muted/50">
+              <div className="text-xs space-y-1">
+                <p className="text-sm">
+                  [{questionEmbedding[0]
+                    .slice(0, 8)
+                    .map((v) => v.toFixed(4))
+                    .join(", ")}
+                  ...]
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Question embedding • {questionEmbedding[0].length} dimensions
+                </p>
+              </div>
+            </div>
+          )}
         </div>
 
-        <div className="space-y-2">
-          <label className="text-sm font-medium">Embedding Vectors:</label>
-          <div className="min-h-[400px] rounded-lg border-2 border-dashed border-muted-foreground/25 p-4">
-            {loadingState.status === "generating" ? (
-              <div className="flex items-center justify-center h-full">
-                Generating embedding vectors...
-              </div>
-            ) : embedding.length > 0 ? (
-              <div className="space-y-8 flex flex-col items-center">
-                {embedding.map((blockEmbedding, blockIndex) => (
-                  <div key={blockIndex}>
-                    <TooltipProvider>
-                      <Tooltip delayDuration={100}>
-                        <TooltipTrigger>
-                          <div className="relative p-2 bg-muted rounded-md hover:bg-muted/80 transition-colors group">
-                            <div className="text-xs text-center space-y-1">
-                              <div className="font-mono">
-                                <p>[{blockEmbedding[0][0].toFixed(4)}...,</p>
-                                <p>
-                                  <span className="text-muted-foreground/60">
-                                    ...
-                                  </span>
-                                </p>
-                                <p>
-                                  {blockEmbedding[0][
-                                    blockEmbedding[0].length - 1
-                                  ].toFixed(4)}
-                                  ...]
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <div className="text-xs">
-                            [
-                            {blockEmbedding
-                              .slice(0, 32)
-                              .map((v) => v[0].toFixed(4))
-                              .join(", ")}
-                            ...]
-                          </div>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="flex items-center justify-center h-full text-muted-foreground">
-                {loadingState.status === "error"
-                  ? `Error: ${loadingState.error}`
-                  : "Please enter text to generate embedding vectors"}
-              </div>
-            )}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Text Blocks:</label>
+            <div className="min-h-[400px] rounded-lg border-2 border-dashed border-muted-foreground/25 p-4 space-y-4 overflow-y-auto">
+              {blocks.map((block, index) => (
+                <div
+                  key={index}
+                  className="p-3 rounded-md bg-muted/50 hover:bg-muted/80 transition-colors"
+                >
+                  <p className="text-sm">{block.text}</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Block {index + 1} • {block.text.length} characters
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Embedding Vectors:</label>
+            <div className="min-h-[400px] rounded-lg border-2 border-dashed border-muted-foreground/25 p-4 space-y-4 overflow-y-auto">
+              {loadingState.status === "generating" ? (
+                <div className="flex items-center justify-center h-full">
+                  Generating embedding vectors...
+                </div>
+              ) : loadingState.status === "embedding" ? (
+                <div className="flex items-center justify-center h-full">
+                  Embedding... {embeddingProgress}%
+                </div>
+              ) : blocksEmbedding.length > 0 ? (
+                <div className="space-y-4">
+                  {blocksEmbedding.map((blockEmbedding, blockIndex) => (
+                    <div
+                      key={blockIndex}
+                      className="p-3 rounded-md bg-muted/50 hover:bg-muted/80 transition-colors"
+                    >
+                      <div className="text-xs space-y-1">
+                        <p className="text-sm">
+                          [{blockEmbedding[0]
+                            .slice(0, 8)
+                            .map((v) => v.toFixed(4))
+                            .join(", ")}
+                          ...]
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Block {blockIndex + 1} • {blockEmbedding[0].length} dimensions
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex items-center justify-center h-full text-muted-foreground">
+                  {loadingState.status === "error"
+                    ? `Error: ${loadingState.error}`
+                    : "Waiting for text blocks to generate embeddings"}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </CardContent>

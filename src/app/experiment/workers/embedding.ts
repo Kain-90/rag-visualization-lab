@@ -1,5 +1,5 @@
 import { pipeline, PipelineType, Tensor } from "@huggingface/transformers";
-import { EmbeddingModel } from "../types/embedding";
+import { EmbeddingModel, EmbeddingTaskMessage } from "../types/embedding";
 import { FeatureExtractionPipeline } from "@huggingface/transformers";
 import {
   EmbeddingProgressMessage,
@@ -41,46 +41,83 @@ class PipelineSingleton {
 }
 
 // Listen for messages from the main thread
-self.addEventListener("message", async (event) => {
-  // Retrieve the classification pipeline. When called for the first time,
-  // this will load the pipeline and save it for future use.
-  if (event.data.task === "feature-extraction") {
-    const task = await PipelineSingleton.getInstance(
-      (x: EmbeddingProgressMessage) => {
-        // We also add a progress callback to the pipeline so that we can
-        // track model loading.
-        self.postMessage(x);
-      }
-    );
-
-    // Actually perform the classification
-    let output: Tensor | Tensor[];
-    if (Array.isArray(event.data.text)) {
-      // Process each element individually
-      output = await Promise.all(
-        event.data.text.map((text: string) =>
-          task(text, { normalize: true, pooling: "cls" })
-        )
-      );
-    } else {
-      output = await task(event.data.text, {
-        normalize: true,
-        pooling: "cls",
-      });
+self.addEventListener("message", async (event: MessageEvent<EmbeddingTaskMessage>) => {
+  console.log("Worker received message:", event.data);
+  
+  try {
+    if (!event.data.task) {
+      throw new Error("No task specified");
     }
 
-    // Send the output back to the main thread
-    const message: EmbeddingProgressMessage = {
-      status: "complete",
-      output: Array.isArray(output)
-        ? output.map((o) => o.tolist())
-        : [output.tolist()],
-    };
-    self.postMessage(message);
-  } else {
+    if (event.data.task === "feature-extraction") {
+      console.log("Starting feature extraction...");
+      
+      const task = await PipelineSingleton.getInstance(
+        (x: EmbeddingProgressMessage) => {
+          console.log("Pipeline progress:", x);
+          self.postMessage(x);
+        }
+      );
+
+      if (!task) {
+        throw new Error("Failed to initialize pipeline");
+      }
+
+      let output: Tensor | Tensor[];
+      if (!event.data.text || event.data.text.length === 0) {
+        output = [];
+      } else if (Array.isArray(event.data.text)) {
+        console.log("Processing text blocks:", event.data.text.length);
+        
+        // 添加批处理进度报告
+        const totalBlocks = event.data.text.length;
+        output = [];
+        
+        // 每个文本块单独处理，这样可以报告进度
+        for (let i = 0; i < totalBlocks; i++) {
+          const result = await task(event.data.text[i], {
+            normalize: true,
+            pooling: "cls"
+          });
+          output.push(result);
+
+          // 报告进度
+          const progressMessage: EmbeddingProgressMessage = {
+            status: "embedding",
+            progress: {
+              name: "text-blocks",
+              status: "loading",
+              progress: Math.round(((i + 1) / totalBlocks) * 100)
+            },
+            message: `Processing block ${i + 1}/${totalBlocks}`
+          };
+          self.postMessage(progressMessage);
+        }
+      } else {
+        output = await task(event.data.text, {
+          normalize: true,
+          pooling: "cls",
+        });
+      }
+
+      console.log("Feature extraction completed");
+      
+      const message: EmbeddingProgressMessage = {
+        status: "complete",
+        type: event.data.type,
+        output: Array.isArray(output)
+          ? output.map((o) => o.tolist())
+          : [output.tolist()],
+      };
+      self.postMessage(message);
+    } else {
+      throw new Error(`Invalid task: ${event.data.task}`);
+    }
+  } catch (error) {
+    console.error("Worker error:", error);
     const message: EmbeddingProgressMessage = {
       status: "error",
-      message: "Invalid task",
+      message: error instanceof Error ? error.message : String(error),
     };
     self.postMessage(message);
   }
